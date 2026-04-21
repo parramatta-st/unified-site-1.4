@@ -1,0 +1,332 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TutorRole {
+  tutor
+  manager
+  admin
+}
+
+enum SessionStatus {
+  scheduled
+  checked_in
+  in_progress
+  completed
+  cancelled
+  no_show
+}
+
+enum FeedbackEmailStatus {
+  pending
+  sent
+  failed
+}
+
+enum PrintJobStatus {
+  queued
+  accepted
+  printing
+  completed
+  failed
+  cancelled
+  printer_offline
+}
+
+enum PrintItemStatus {
+  queued
+  started
+  completed
+  failed
+}
+
+enum NotificationStatus {
+  queued
+  sent
+  failed
+  read
+}
+
+model Campus {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  name      String
+  phone     String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tutors         Tutor[]
+  sessions       Session[]
+  feedbackEvents FeedbackEvent[]
+  printJobs      PrintJob[]
+  auditEvents    AuditEvent[]
+}
+
+model Tutor {
+  id        String    @id @default(cuid())
+  campusId  String
+  fullName  String
+  shortName String?
+  email     String    @unique
+  phone     String?
+  role      TutorRole @default(tutor)
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  campus         Campus          @relation(fields: [campusId], references: [id])
+  sessions       Session[]
+  devices        TutorDevice[]
+  feedbackEvents FeedbackEvent[]
+  printJobs      PrintJob[]
+  notifications  Notification[]
+}
+
+model TutorDevice {
+  id         String   @id @default(cuid())
+  tutorId    String
+  platform   String
+  pushToken  String   @unique
+  appVersion String?
+  lastSeenAt DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tutor Tutor @relation(fields: [tutorId], references: [id])
+
+  @@index([tutorId])
+}
+
+model Student {
+  id             String   @id @default(cuid())
+  externalSource String?
+  externalId     String?
+  fullName       String
+  firstName      String?
+  yearLevel      String?
+  pronouns       String?
+  status         String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  sessions       Session[]
+  feedbackEvents FeedbackEvent[]
+  printJobs      PrintJob[]
+  guardians      StudentGuardian[]
+
+  @@unique([externalSource, externalId])
+}
+
+model Guardian {
+  id        String   @id @default(cuid())
+  fullName  String
+  email     String?
+  phone     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  students StudentGuardian[]
+}
+
+model StudentGuardian {
+  id            String  @id @default(cuid())
+  studentId     String
+  guardianId    String
+  relationship  String?
+  primaryContact Boolean @default(false)
+
+  student  Student  @relation(fields: [studentId], references: [id])
+  guardian Guardian @relation(fields: [guardianId], references: [id])
+
+  @@unique([studentId, guardianId])
+}
+
+model Session {
+  id             String        @id @default(cuid())
+  campusId       String
+  externalSource String?
+  externalId     String?
+  tutorId        String?
+  studentId      String
+  startsAt       DateTime
+  endsAt         DateTime
+  subject        String?
+  program        String?
+  topic          String?
+  status         SessionStatus @default(scheduled)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  campus         Campus          @relation(fields: [campusId], references: [id])
+  tutor          Tutor?          @relation(fields: [tutorId], references: [id])
+  student        Student         @relation(fields: [studentId], references: [id])
+  feedbackEvents FeedbackEvent[]
+  printJobs      PrintJob[]
+
+  @@unique([externalSource, externalId])
+  @@index([campusId, startsAt])
+  @@index([tutorId, startsAt])
+}
+
+model FeedbackEvent {
+  id                String              @id @default(cuid())
+  campusId          String
+  tutorId           String?
+  studentId         String
+  sessionId         String?
+  year              String?
+  subject           String?
+  strand            String?
+  lesson            String?
+  topic             String?
+  mode              String?
+  templateIndex     Int?
+  messageText       String
+  parentEmail       String?
+  emailStatus       FeedbackEmailStatus @default(pending)
+  sentAt            DateTime?
+  providerMessageId String?
+  rawPayload        Json?
+  createdAt         DateTime            @default(now())
+
+  campus  Campus   @relation(fields: [campusId], references: [id])
+  tutor   Tutor?   @relation(fields: [tutorId], references: [id])
+  student Student  @relation(fields: [studentId], references: [id])
+  session Session? @relation(fields: [sessionId], references: [id])
+
+  @@index([campusId, createdAt])
+  @@index([studentId, createdAt])
+}
+
+model PrintJob {
+  id            String         @id @default(cuid())
+  campusId      String
+  tutorId       String?
+  studentId     String?
+  sessionId     String?
+  requestedAt   DateTime       @default(now())
+  requestedQty  Int            @default(1)
+  printerName   String?
+  requestType   String?
+  status        PrintJobStatus @default(queued)
+  sourcePath    String?
+  topic         String?
+  subject       String?
+  year          String?
+  rawRequest    Json?
+  latestEventAt DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  campus   Campus    @relation(fields: [campusId], references: [id])
+  tutor    Tutor?    @relation(fields: [tutorId], references: [id])
+  student  Student?  @relation(fields: [studentId], references: [id])
+  session  Session?  @relation(fields: [sessionId], references: [id])
+  items    PrintJobItem[]
+
+  @@index([campusId, requestedAt])
+  @@index([tutorId, requestedAt])
+  @@index([status, updatedAt])
+}
+
+model PrintJobItem {
+  id          String          @id @default(cuid())
+  printJobId  String
+  materialId  String?
+  itemName    String
+  itemType    String?
+  path        String?
+  sequenceNo  Int
+  status      PrintItemStatus @default(queued)
+  startedAt   DateTime?
+  completedAt DateTime?
+  rawResponse Json?
+
+  printJob PrintJob @relation(fields: [printJobId], references: [id])
+
+  @@index([printJobId, sequenceNo])
+}
+
+model Notification {
+  id          String             @id @default(cuid())
+  tutorId     String
+  type        String
+  title       String
+  body        String
+  payload     Json?
+  status      NotificationStatus @default(queued)
+  deliveredAt DateTime?
+  readAt      DateTime?
+  createdAt   DateTime           @default(now())
+
+  tutor Tutor @relation(fields: [tutorId], references: [id])
+
+  @@index([tutorId, createdAt])
+  @@index([status, createdAt])
+}
+
+model AuditEvent {
+  id         String   @id @default(cuid())
+  actorType  String
+  actorId    String?
+  campusId   String?
+  entityType String
+  entityId   String?
+  action     String
+  payload    Json?
+  createdAt  DateTime @default(now())
+
+  campus Campus? @relation(fields: [campusId], references: [id])
+
+  @@index([campusId, createdAt])
+  @@index([entityType, entityId, createdAt])
+}
+
+model IntegrationConfig {
+  id        String   @id @default(cuid())
+  campusId  String?
+  provider  String
+  key       String
+  value     String
+  encrypted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([campusId, provider, key])
+}
+
+model CurriculumEntry {
+  id        String   @id @default(cuid())
+  year      String
+  subject   String
+  strand    String?
+  lesson    String?
+  topic     String?
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([year, subject])
+}
+
+model PrintCatalogItem {
+  id          String   @id @default(cuid())
+  materialId  String?
+  itemType    String?
+  displayName String
+  path        String
+  topic       String?
+  subject     String?
+  year        String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([year, subject, topic])
+}
