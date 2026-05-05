@@ -107,6 +107,13 @@ function normalizeCatalogPath(pathSegments: string[]) {
   return cleaned;
 }
 
+function normalizeYearValue(value: string | undefined) {
+  const trimmed = (value || '').trim();
+  if (!trimmed) return '';
+  if (trimmed.toLowerCase() === 'unknown') return '';
+  return trimmed;
+}
+
 function pickFirstNonEmpty(...values: Array<string | undefined>) {
   for (const value of values) {
     const trimmed = (value || '').trim();
@@ -118,7 +125,7 @@ function pickFirstNonEmpty(...values: Array<string | undefined>) {
 function deriveContextFromPath(pathSegments: string[], item?: CatalogItem): PrintContext {
   const cleaned = normalizeCatalogPath(pathSegments);
   const folder = getFolderLabel(cleaned);
-  const year = pickFirstNonEmpty(item?.year, cleaned[0]);
+  const year = pickFirstNonEmpty(normalizeYearValue(item?.year), normalizeYearValue(cleaned[0]));
   const subjectFromItem = (item?.subject || '').trim();
   const looksLikeRealSubject = subjectFromItem && subjectFromItem.toLowerCase() !== 'content';
   const subject = looksLikeRealSubject ? subjectFromItem : pickFirstNonEmpty(cleaned[1]);
@@ -152,7 +159,7 @@ function deriveContextFromItems(pathSegments: string[], items: TreeFile[]): Prin
   );
 
   return {
-    year: pickCommon(items.map((item) => item.year || ''), base.year),
+    year: pickCommon(items.map((item) => normalizeYearValue(item.year)), base.year),
     subject: pickCommon(
       items
         .map((item) => (item.subject || '').trim())
